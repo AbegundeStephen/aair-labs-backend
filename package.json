@@ -1,0 +1,31 @@
+{
+  "name": "aair-labs-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbegundeStephen/aair-labs-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AbegundeStephen/aair-labs-backend/issues"
+  },
+  "homepage": "https://github.com/AbegundeStephen/aair-labs-backend#readme",
+  "dependencies": {
+    "axios": "^1.12.2",
+    "form-data": "^4.0.4",
+    "formidable": "^3.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.8.1",
+    "@vercel/node": "^5.4.1",
+    "typescript": "^5.9.3"
+  }
+}
