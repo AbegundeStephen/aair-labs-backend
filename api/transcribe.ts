@@ -1,36 +1,40 @@
 // api/transcribe.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import axios from 'axios';
-import FormData from 'form-data';
-import fs from 'fs';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
 
     const { audioBase64 } = req.body;
-    if (!audioBase64) return res.status(400).json({ error: 'Missing audioBase64' });
 
-    // Decode the base64 into a temporary file
+    if (!audioBase64) {
+      return res.status(400).json({ error: 'Missing audioBase64' });
+    }
+
+    console.log('🎧 Received audio data, decoding...');
     const buffer = Buffer.from(audioBase64, 'base64');
-    fs.writeFileSync('/tmp/audio.m4a', buffer);
 
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream('/tmp/audio.m4a'));
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'en');
-    formData.append('response_format', 'json');
+    // Convert buffer to Blob (OpenAI SDK handles multipart automatically)
+    const file = new Blob([buffer], { type: 'audio/m4a' });
 
-    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders(),
-      },
+    console.log('🧠 Sending audio to OpenAI Whisper...');
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: 'gpt-4o-mini-transcribe', // modern replacement for whisper-1
+      language: 'en',
     });
 
-    res.status(200).json({ text: response.data.text });
+    console.log('✅ Transcription complete');
+    return res.status(200).json({ text: transcription.text });
   } catch (err: any) {
-    console.error('Transcription error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to transcribe audio' });
+    console.error('❌ Transcription error:', err.response?.data || err.message || err);
+    return res.status(500).json({
+      error: err.response?.data || err.message || 'Failed to transcribe audio',
+    });
   }
 }
