@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing or empty transcript' })
     }
 
-    console.log('🧩 Sending transcript to AssemblyAI for task extraction...')
+    console.log('Sending transcript to AssemblyAI for task extraction...')
 
     // AssemblyAI Task Extraction (LLM)
     const aiResponse = await axios.post(
@@ -33,15 +33,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tasks = aiResponse.data?.response?.tasks || []
 
     if (!Array.isArray(tasks) || tasks.length === 0) {
-      console.warn('⚠️ No valid tasks returned from AssemblyAI, using fallback')
+      console.warn('No valid tasks returned from AssemblyAI, using fallback')
       const fallback = splitTasksFallback(transcript)
       return res.status(200).json({ tasks: fallback })
     }
 
-    console.log('✅ Extracted tasks:', tasks)
+    console.log('Extracted tasks:', tasks)
     return res.status(200).json({ tasks })
   } catch (err: any) {
-    console.error('❌ Task split error:', err.response?.data || err.message)
+    console.error('Task split error:', err.response?.data || err.message)
 
     // Fallback if AssemblyAI fails
     const transcript = req.body?.transcript || ''
@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // Local Fallback Function
 
 function splitTasksFallback(text: string): string[] {
-  console.log('🔄 Using fallback task splitting')
+  console.log('Using fallback task splitting')
   const delimiters = /\s+and\s+|,\s*(?:and\s+)?|;\s+|\.\s+|then\s+|also\s+|plus\s+/i
 
   const tasks = text
