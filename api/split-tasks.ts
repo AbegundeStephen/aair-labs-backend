@@ -1,75 +1,81 @@
 // api/split-tasks.ts
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import axios from 'axios';
 
-const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import axios from 'axios'
+
+const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY!
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
 
-    const { transcript } = req.body;
-    if (!transcript) return res.status(400).json({ error: 'Missing transcript' });
+    const { transcript } = req.body
+    if (!transcript || transcript.trim().length === 0) {
+      return res.status(400).json({ error: 'Missing or empty transcript' })
+    }
 
-    console.log('🧩 Sending transcript to AssemblyAI for task extraction...');
+    console.log('🧩 Sending transcript to AssemblyAI for task extraction...')
 
-    // Request with entity detection and auto highlights
+    // AssemblyAI Task Extraction (LLM)
     const aiResponse = await axios.post(
-      'https://api.assemblyai.com/v2/transcript',
-      {
-        text: transcript,
-        entity_detection: true,
-        auto_chapters: true,
-        iab_categories: true,
-      },
+      'https://api.assemblyai.com/v2/generate/task-extraction',
+      { input: transcript },
       {
         headers: {
-          authorization: ASSEMBLYAI_API_KEY!,
+          authorization: ASSEMBLYAI_API_KEY,
           'Content-Type': 'application/json',
         },
       }
-    );
+    )
 
-    const transcriptId = aiResponse.data.id;
-    console.log('⏳ Processing entities and chapters, ID:', transcriptId);
+    const tasks = aiResponse.data?.response?.tasks || []
 
-    // Poll until completed
-    let result: any;
-    while (true) {
-      const poll = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-        headers: { authorization: ASSEMBLYAI_API_KEY! },
-      });
-
-      if (poll.data.status === 'completed') {
-        result = poll.data;
-        console.log('✅ Task extraction completed');
-        break;
-      } else if (poll.data.status === 'error') {
-        throw new Error(`AssemblyAI error: ${poll.data.error}`);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      console.warn('⚠️ No valid tasks returned from AssemblyAI, using fallback')
+      const fallback = splitTasksFallback(transcript)
+      return res.status(200).json({ tasks: fallback })
     }
 
-    // Extract potential tasks from detected entities or key phrases
-    const entities = result.entities || [];
-    const chapters = result.chapters || [];
-
-    const entityTasks = entities
-      .map((e: any) => e.text)
-      .filter((text: string) => /^[A-Z]/.test(text))
-      .slice(0, 15);
-
-    const chapterSummaries = chapters.map((c: any) => c.summary);
-
-    const combinedTasks = [...new Set([...entityTasks, ...chapterSummaries])]
-      .filter((t) => t && t.length > 2);
-
-    return res.status(200).json({ tasks: combinedTasks });
+    console.log('✅ Extracted tasks:', tasks)
+    return res.status(200).json({ tasks })
   } catch (err: any) {
-    console.error('❌ Task split error:', err.response?.data || err.message);
-    return res.status(500).json({
-      error: err.response?.data || err.message || 'Failed to split tasks',
-    });
+    console.error('❌ Task split error:', err.response?.data || err.message)
+
+    // Fallback if AssemblyAI fails
+    const transcript = req.body?.transcript || ''
+    const fallback = splitTasksFallback(transcript)
+    return res.status(200).json({ tasks: fallback })
   }
+}
+
+
+// Local Fallback Function
+
+function splitTasksFallback(text: string): string[] {
+  console.log('🔄 Using fallback task splitting')
+  const delimiters = /\s+and\s+|,\s*(?:and\s+)?|;\s+|\.\s+|then\s+|also\s+|plus\s+/i
+
+  const tasks = text
+    .split(delimiters)
+    .map((task) => {
+      task = task.trim()
+      task = task.replace(
+        /^(i need to|i have to|i want to|remind me to|don't forget to)\s+/i,
+        ''
+      )
+      task = task.charAt(0).toUpperCase() + task.slice(1)
+      return task
+    })
+    .filter((task) => task.length > 2 && task.length < 200)
+    .slice(0, 10)
+
+  if (tasks.length === 0) {
+    const cleaned = text.trim()
+    if (cleaned.length > 0)
+      return [cleaned.charAt(0).toUpperCase() + cleaned.slice(1)]
+  }
+
+  return tasks
 }
